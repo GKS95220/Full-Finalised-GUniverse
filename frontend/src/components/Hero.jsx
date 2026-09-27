@@ -94,7 +94,7 @@ export default function Hero() {
               transition={{ duration: 1, delay: 1.5 }}
               className="mt-12 flex flex-wrap items-center gap-x-8 gap-y-3"
             >
-              {["Meta Quest 3S Native", "Non-Pharmacological", "Non-Biometric Architecture"].map((t) => (
+              {["Non-Pharmacological", "Non-Biometric Architecture"].map((t) => (
                 <span key={t} className="flex items-center gap-2 font-mono-gu text-xs uppercase tracking-[0.15em] text-slate-500">
                   <span className="h-1.5 w-1.5 rounded-full bg-cyan-400 shadow-[0_0_8px_rgba(0,242,254,0.8)]" />
                   {t}
