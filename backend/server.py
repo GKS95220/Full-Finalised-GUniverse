@@ -331,14 +331,24 @@ async def refresh(request: Request, response: Response):
 
 app.include_router(api_router)
 
-frontend_url = os.environ.get("FRONTEND_URL", "")
-origins = [o for o in os.environ.get("CORS_ORIGINS", "").split(",") if o and o != "*"]
+frontend_url = os.environ.get("FRONTEND_URL", "").strip()
+
+origins = [
+    origin.strip()
+    for origin in os.environ.get("CORS_ORIGINS", "").split(",")
+    if origin.strip() and origin.strip() != "*"
+]
+
 if frontend_url:
     origins.append(frontend_url)
+
+# Remove duplicate origins while preserving the existing order
+origins = list(dict.fromkeys(origins))
+
 app.add_middleware(
     CORSMiddleware,
+    allow_origins=origins,
     allow_credentials=True,
-    allow_origins=origins or ["http://localhost:3000"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
