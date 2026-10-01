@@ -33,10 +33,10 @@ api_router = APIRouter(prefix="/api")
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# --- Email (Emergent managed Resend proxy) ---
-EMAIL_BASE_URL = "https://integrations.emergentagent.com"
-EMAIL_KEY = os.environ["EMERGENT_EMAIL_KEY"]
+# --- Email (Resend) ---
+RESEND_API_KEY = os.environ["RESEND_API_KEY"]
 EMAIL_FROM_NAME = os.environ["EMAIL_FROM_NAME"]
+EMAIL_FROM_ADDRESS = os.environ["EMAIL_FROM_ADDRESS"]
 ADMIN_NOTIFY_EMAIL = os.environ["ADMIN_NOTIFY_EMAIL"]
 
 _SHORTENERS = ("bit.ly", "tinyurl.com", "t.co", "is.gd", "cutt.ly", "goo.gl", "rebrand.ly")
@@ -112,13 +112,29 @@ def _assert_safe_email(subject: str, html: str) -> None:
                 raise ValueError(f"Anchor text {m.group(1)!r} != real link host {real!r} (G3)")
 
 
-async def send_email(*, to: str, subject: str, html: str) -> str | None:
-    _assert_safe_email(subject, html)
-    payload = {"to": [to], "subject": subject, "html": html, "from_name": EMAIL_FROM_NAME}
+def _clean_name(name: str | None) -> str:
+    return re.sub(r'[<>"\r\n]', "", name or "").strip()[:80]
+
+
+async def send_email(*, to: str, subject: str, html: str, text: str | None = None,
+                     reply_to: str | None = None, from_name: str | None = None,
+                     check: bool = True) -> str | None:
+    if check:
+        _assert_safe_email(subject, html)
+    payload = {
+        "from": f"{_clean_name(from_name) or EMAIL_FROM_NAME} <{EMAIL_FROM_ADDRESS}>",
+        "to": [to],
+        "subject": subject,
+        "html": html,
+    }
+    if text:
+        payload["text"] = text
+    if reply_to:
+        payload["reply_to"] = reply_to
     async with httpx.AsyncClient(timeout=30) as client:
         resp = await client.post(
-            f"{EMAIL_BASE_URL}/api/v1/email/send",
-            headers={"X-Email-Key": EMAIL_KEY},
+            "https://api.resend.com/emails",
+            headers={"Authorization": f"Bearer {RESEND_API_KEY}"},
             json=payload,
         )
     resp.raise_for_status()
@@ -126,29 +142,23 @@ async def send_email(*, to: str, subject: str, html: str) -> str | None:
 
 
 def lead_notification_html(lead: "Lead") -> str:
-    row = lambda label, value: (
-        f'<tr><td style="padding:8px 16px 8px 0;color:#64748b;font-size:13px;vertical-align:top">{label}</td>'
-        f'<td style="padding:8px 0;color:#0f172a;font-size:14px">{value}</td></tr>'
+    p = lambda label, value: (
+        f'<p style="margin:0 0 12px"><strong>{label}:</strong> {value}</p>'
     )
     return (
-        '<table role="presentation" width="100%" style="background:#f1f5f9;padding:32px 0"><tr><td align="center">'
-        '<table role="presentation" width="560" style="background:#ffffff;border-radius:12px;padding:32px;'
-        'font-family:Arial,sans-serif;border:1px solid #e2e8f0">'
-        '<tr><td><p style="font-size:12px;letter-spacing:2px;color:#0891b2;text-transform:uppercase;margin:0 0 8px">'
-        'GUniverse Pilot Access</p>'
-        '<h1 style="font-size:20px;color:#0f172a;margin:0 0 20px">New pilot request received</h1>'
-        '<table role="presentation" width="100%">'
-        + row("Name", escape(lead.name))
-        + row("Email", escape(lead.email))
-        + row("Organization", escape(lead.organization))
-        + row("Message", escape(lead.message))
-        + '</table>'
-        '<p style="margin:24px 0 0"><a href="https://guniverse-demo.preview.emergentagent.com/admin" '
-        'style="display:inline-block;background:#0e7490;color:#ffffff;text-decoration:none;padding:10px 20px;'
-        'border-radius:8px;font-size:14px">Open Leads Dashboard</a></p>'
-        '<p style="font-size:12px;color:#94a3b8;margin:24px 0 0">Sent by GUniverse. We never ask for your '
-        'password or card details by email.</p>'
-        '</td></tr></table></td></tr></table>'
+        '<div style="font-family:Arial,sans-serif;font-size:14px;color:#0f172a">'
+        + p("Name", escape(lead.name))
+        + p("Email", escape(lead.email))
+        + p("Organization", escape(lead.organization))
+        + p("Message", escape(lead.message).replace("\n", "<br>"))
+        + '</div>'
+    )
+
+
+def lead_notification_text(lead: "Lead") -> str:
+    return (
+        f"Name: {lead.name}\nEmail: {lead.email}\n"
+        f"Organization: {lead.organization}\nMessage: {lead.message}\n"
     )
 
 
@@ -245,6 +255,10 @@ async def create_lead(input: LeadCreate):
             to=ADMIN_NOTIFY_EMAIL,
             subject=f"New pilot request from {lead.organization}",
             html=lead_notification_html(lead),
+            text=lead_notification_text(lead),
+            reply_to=lead.email,
+            from_name=f"{lead.name} (via GUniverse)",
+            check=False,  # internal notice to the owner; visitor text is HTML-escaped
         )
     except Exception as e:
         logger.error(f"Lead notification email failed: {e}")
