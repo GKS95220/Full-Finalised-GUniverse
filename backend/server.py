@@ -331,9 +331,16 @@ async def refresh(request: Request, response: Response):
 
 app.include_router(api_router)
 
+# --- CORS ---
 frontend_url = os.environ.get("FRONTEND_URL", "").strip()
 
 origins = [
+    "https://guniversehealthcare.com",
+    "https://www.guniversehealthcare.com",
+]
+
+# Keep support for any additional origins already configured in Render
+configured_origins = [
     origin.strip()
     for origin in os.environ.get("CORS_ORIGINS", "").split(",")
     if origin.strip() and origin.strip() != "*"
@@ -341,6 +348,19 @@ origins = [
 
 if frontend_url:
     origins.append(frontend_url)
+
+origins.extend(configured_origins)
+
+# Remove duplicates
+origins = list(dict.fromkeys(origins))
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Remove duplicate origins while preserving the existing order
 origins = list(dict.fromkeys(origins))
