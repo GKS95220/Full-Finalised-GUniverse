@@ -55,7 +55,7 @@ export default function About() {
             transition={{ duration: 0.8, delay: 0.15 }}
             className="mt-6 text-sm leading-relaxed text-slate-400 sm:text-base"
           >
-            GUniverse Technologies is a MedTech & EdTech startup pioneering non-pharmacological
+            GUniverse Healthcare Technologies is a MedTech & EdTech startup pioneering non-pharmacological
             healthcare through immersive Extended Reality. Our platform is architected directly by our
             Founder & CTO — a multi-planetary VR ecosystem for
             mental well-being and physical rehabilitation, headquartered in New Delhi, India.
